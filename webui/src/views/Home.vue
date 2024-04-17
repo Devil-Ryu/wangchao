@@ -1,15 +1,21 @@
 <template>
     <div class="h-full flex flex-column bg-gray-300">
         <div class="h-12rem p-3 bg-primary border-round m-2 ">
-            <div class="field grid">
-                <label class="col-fixed" style="width:100px">当前设备</label>
-                <div class="col ">{{ deviceInfo.deviceName }}</div>
+            <div class="flex align-items-center">
+                <label style="width:100px">当前设备</label>
+                <div class="flex align-items-center">
+                    <div>{{ deviceInfo.deviceName }}</div>
+                </div>
             </div>
-            <div class="field grid">
-                <label class="col-fixed" style="width:100px">链接地址</label>
-                <div class="col">{{ deviceInfo.deviceID }}</div>
+            <div class="flex align-items-center mt-2">
+                <label style="width:100px">链接地址</label>
+                <div class="flex align-items-center">{{ deviceInfo.deviceID }}</div>
             </div>
-            <div class="flex">
+            <div class="flex align-items-center mt-2">
+                <label style="width:100px">运行状态</label>
+                <div class="flex align-items-center"><span>{{ deviceInfo.deviceStatus ? '在线' : '离线' }}</span></div>
+            </div>
+            <div class="flex mt-2">
                 <Button class="w-full justify-content-center" @click="newDivceDialogVisible = true">
                     <div><i class="pi pi-plus mr-2"></i>新增设备</div>
                 </Button>
@@ -94,10 +100,10 @@ import { useToast } from 'primevue/usetoast';
 import Toast from 'primevue/toast';
 
 const toast = useToast();
-const devicePanel = ref(null);
 const deviceInfo = ref({
-    deviceName: 'device1',
-    deviceID: '192.168.1.100:5555'
+    deviceName: '',
+    deviceID: '',
+    deviceStatus: false,
 });
 const selectedDevice = ref({});
 const deviceList = ref([]);
@@ -107,10 +113,6 @@ const deviceManageDialogVisible = ref(false);
 function handleSelect({ originalEvent, value }) {
     console.log("selected originalEvent: ", originalEvent);
     console.log("selected value: ", value);
-}
-
-function toggleDevice(event) {
-    devicePanel.value.toggle(event);
 }
 
 // 添加设备
@@ -166,8 +168,7 @@ function switchDevice() {
         .then(response => response.json())
         .then(data => {
             if (data.status_code !== undefined && data.status_code === 200) {
-                deviceInfo.value.deviceName = selectedDevice.value.device_name;
-                deviceInfo.value.deviceID = selectedDevice.value.device_id;
+                refreshDeviceInfo()
                 toast.add({ severity: 'success', summary: '设备切换成功', detail: data.message, life: 3000 });
                 deviceManageDialogVisible.value = false;
             } else {
@@ -202,13 +203,14 @@ function deleteDevice() {
         });
 }
 
-onMounted(() => {
+function refreshDeviceInfo() {
     fetch('http://127.0.0.1:8000/devices/current')
         .then(response => response.json())
         .then(data => {
             if (data.status_code !== undefined && data.status_code === 200) {
                 deviceInfo.value.deviceName = data.data.device_name;
                 deviceInfo.value.deviceID = data.data.device_id;
+                deviceInfo.value.deviceStatus = data.data.device_status;
             } else {
                 toast.add({ severity: 'error', summary: '设备信息获取失败', detail: data.message, life: 3000 });
             }
@@ -216,6 +218,10 @@ onMounted(() => {
         .catch((error) => {
             toast.add({ severity: 'error', summary: '设备信息获取失败', detail: error, life: 3000 });
         });
+}
+
+onMounted(() => {
+    refreshDeviceInfo()
 })
 
 </script>

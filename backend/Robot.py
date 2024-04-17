@@ -85,7 +85,7 @@ class WangchaoRobot:
 
 
 if __name__ == '__main__':
-    device_id = '192.168.45.193:5555'
+    device_id = '192.168.2.129:5555'
     robot = WangchaoRobot()
     robot.connectDevice(device_id)
     print(robot.getDeviceInfo())

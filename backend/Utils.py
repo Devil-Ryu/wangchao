@@ -2,6 +2,7 @@ import json
 import cv2
 import numpy as np
 import os
+import uiautomator2 as u2
 
 # 读取json文件并和字典进行合并
 def merge_json_to_dict(json_file, dict_obj):
@@ -129,3 +130,17 @@ def get_current_device_config():
     with open(device_config_file, 'r') as f:
         device_config = json.load(f)
     return device_config, device_id
+
+# 获取当前设备连接状态
+def get_current_device_status():
+    current_device_file = os.path.join(os.getcwd(), 'resources', 'current_device.txt')
+    with open(current_device_file, 'r') as f:
+        device_name, device_id = f.read().strip().split(',')
+        print("device_id", device_id)
+        try:
+            d = u2.connect(device_id)
+            print("device_info", d.info)
+            return True
+        except:
+            return False
+   
