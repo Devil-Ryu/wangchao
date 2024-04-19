@@ -1,5 +1,5 @@
 <template>
-    <div class="h-full flex flex-column bg-gray-300">
+    <div >
         <div class="h-12rem p-3 bg-primary border-round m-2 ">
             <div class="flex align-items-center">
                 <label style="width:100px">当前设备</label>
@@ -29,24 +29,25 @@
         <div class="h-full m-2">
             <div class="flex bg-primary w-full border-round  align-items-center h-4rem">
                 <div id="icon" class="flex  h-full  w-4rem align-items-center justify-content-center"><i
-                        class="pi pi-th-large" style="font-size: 1.5rem;"></i></div>
-                <div class="w-full h-full  flex justify-content-between align-items-center">
-                    <div class="ml-2">测试功能一</div>
+                        class="pi pi-shield" style="font-size: 1.5rem;"></i></div>
+                <div class="w-full h-full flex justify-content-between align-items-center">
+                    <div class="ml-2">防护罩监听</div>
                     <div class="flex">
-                        <Button>配置</Button>
-                        <Button>启用</Button>
+                        <Button @click="router.push({path: '/protect'})" >配置</Button>
+                        <Button v-if="!deviceInfo.protected_mask_enabled" @click="startProtect">运行</Button>
+                        <Button v-if="deviceInfo.protected_mask_enabled" @click="stopProtect">停止</Button>
                     </div>
                 </div>
 
             </div>
             <div class="flex  bg-primary w-full border-round  align-items-center h-4rem mt-2">
                 <div id="icon" class="flex  h-full  w-4rem align-items-center justify-content-center"><i
-                        class="pi pi-th-large" style="font-size: 1.5rem;"></i></div>
+                        class="pi pi-megaphone" style="font-size: 1.5rem;"></i></div>
                 <div class="w-full h-full  flex justify-content-between align-items-center">
-                    <div class="ml-2">测试功能二</div>
+                    <div class="ml-2">集结监听</div>
                     <div class="flex">
-                        <Button>配置</Button>
-                        <Button>启用</Button>
+                        <Button>运行</Button>
+                        <Button>停止</Button>
                     </div>
                 </div>
 
@@ -89,7 +90,6 @@
             <Button type="button" label="删除设备" severity="danger" @click="deleteDevice"></Button>
             <Button type="button" label="切换设备" @click="switchDevice"></Button>
         </div>
-
     </Dialog>
     <Toast />
 </template>
@@ -98,12 +98,16 @@
 import { ref, onMounted } from 'vue';
 import { useToast } from 'primevue/usetoast';
 import Toast from 'primevue/toast';
+import { useRouter } from 'vue-router';
+
+const router = useRouter();
 
 const toast = useToast();
 const deviceInfo = ref({
     deviceName: '',
     deviceID: '',
     deviceStatus: false,
+    protected_mask_enabled: false,
 });
 const selectedDevice = ref({});
 const deviceList = ref([]);
@@ -137,7 +141,6 @@ function addDevice() {
         });
     newDivceDialogVisible.value = false;
 }
-
 
 // 管理设备
 function openDeviceManageDialog() {
@@ -211,12 +214,64 @@ function refreshDeviceInfo() {
                 deviceInfo.value.deviceName = data.data.device_name;
                 deviceInfo.value.deviceID = data.data.device_id;
                 deviceInfo.value.deviceStatus = data.data.device_status;
+                deviceInfo.value.protected_mask_enabled = data.data.protected_mask_enabled;
             } else {
                 toast.add({ severity: 'error', summary: '设备信息获取失败', detail: data.message, life: 3000 });
             }
         })
         .catch((error) => {
             toast.add({ severity: 'error', summary: '设备信息获取失败', detail: error, life: 3000 });
+        });
+}
+
+// 更新配置
+function updateConfig(key, value) {
+    fetch('http://127.0.0.1:8000/update/config?key=' + key + '&value=' + value, {})
+        .then(response => response.json())
+        .then(data => {
+            if (data.status_code !== undefined && data.status_code === 200) {
+            } else {
+                toast.add({ severity: 'error', summary: '配置更新失败', detail: data.message, life: 3000 });
+            }
+        })
+        .catch((error) => {
+            toast.add({ severity: 'error', summary: '配置更新失败', detail: error, life: 3000 });
+        });
+}
+
+function startProtect() {
+    deviceInfo.value.protected_mask_enabled = true;
+    updateConfig('protected_mask_enabled', true);
+    fetch('http://127.0.0.1:8000/functions/start_protect', {
+        method: 'GET'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.status_code !== undefined && data.status_code === 200) {
+                toast.add({ severity: 'success', summary: '防护罩监听启动成功', detail: data.message, life: 3000 });
+            } else {
+                toast.add({ severity: 'error', summary: '防护罩监听启动失败', detail: data.message, life: 3000 });
+            }
+        })
+        .catch((error) => {
+            toast.add({ severity: 'error', summary: '防护罩监听启动失败', detail: error, life: 3000 }); 
+        });
+}
+
+function stopProtect() {
+    deviceInfo.value.protected_mask_enabled = false;
+    updateConfig('protected_mask_enabled', false);
+    fetch('http://127.0.0.1:8000/functions/stop_protect?task_id=protect_task', {
+        method: 'GET'})
+        .then(response => response.json())
+        .then(data => {
+            if (data.status_code !== undefined && data.status_code === 200) {
+                toast.add({ severity: 'success', summary: '防护罩监听停止成功', detail: data.message, life: 3000 });
+            } else {
+                toast.add({ severity: 'error', summary: '防护罩监听停止失败', detail: data.message, life: 3000 });
+            }
+        })
+        .catch((error) => {
+            toast.add({ severity: 'error', summary: '防护罩监听停止失败', detail: error, life: 3000 }); 
         });
 }
 

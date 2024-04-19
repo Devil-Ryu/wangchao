@@ -1,17 +1,20 @@
+import asyncio
 import uiautomator2 as u2
 import time
 import cv2
 import numpy as np
 import os
-from Utils import compare_region
+from Utils import compare_region, get_current_device, get_current_device_config
 
 class WangchaoRobot:
     device = None
+
     config = {
-        "device_id": "192.168.45.193:5555",
-        "protected_mask_region": [[[220, 100], [400, 300, 500, 600]], [[100, 200], [300, 400, 500, 600]]],
-        "protected_query_time": 60,
+        "device_id": "",
+        "protected_mask_region": [],
+        "protected_mask_query_time": 60,
         "assemble_detection_region": [],
+        "protected_mask_enabled": False,
     }
 
     # 初始化
@@ -20,7 +23,15 @@ class WangchaoRobot:
 
     # 设置设备
     def connectDevice(self, device_id):
-        self.device = u2.connect(device_id)
+        try:
+            self.device = u2.connect(device_id)
+        except:
+            return False
+        return True
+    
+    # 设置配置
+    def setConfig(self, config):
+        self.config = config
 
     # 获取设备信息
     def getDeviceInfo(self):
@@ -54,34 +65,62 @@ class WangchaoRobot:
         # 检查是否链接设备
         if self.device is None:
             return False
-
+        
+        # 检测配置是否有region字段
+        if len(self.config["protected_mask_region"]) == 0:
+            return False
+        
         # 定义存储的图片名称
-        fileName1 = os.path.join(os.getcwd(),"images", "screenshot1.jpg")
-        fileName2 =  os.path.join(os.getcwd(),"images", "screenshot2.jpg")
+        fileName1 = "detect_mask1"
+        fileName2 = "detect_mask2"
+        print("config: ", self.config["protected_mask_region"])
         for region in self.config["protected_mask_region"]:
             # 导航到目标区域，并获取目标区域矩阵
             self.navigate_to_target_region(region[0][0], region[0][1])
+            time.sleep(2)
 
             # 查看监听区域变化
-            self.device.screenshot(fileName1, "opencv")
+            filePath1 = self.get_screenshot(fileName1)
             time.sleep(1)  # 两次操作，间隔1s
-            self.device.screenshot(fileName2, "opencv")
+            filePath2 = self.get_screenshot(fileName2)
 
-            image1 = cv2.imread(fileName1)
-            image2 = cv2.imread(fileName2)
-            cropped_image1 = image1[region[1][1]:region[1][3], region[0][0]:region[1][2]]
-            cropped_image2 = image2[region[1][1]:region[1][3], region[0][0]:region[1][2]]
+            image1 = cv2.imread(filePath1)
+            image2 = cv2.imread(filePath2)
+            cropped_image1 = image1[region[1][1]:region[1][1]+region[1][3], region[1][0]:region[1][0]+region[1][2]]
+            cropped_image2 = image1[region[1][1]:region[1][1]+region[1][3], region[1][0]:region[1][0]+region[1][2]]
         
-        result = compare_region(cropped_image1, cropped_image2)
-        print(result)
+            result = compare_region(cropped_image1, cropped_image2)
+            print("detect_mask_result:", result)
         return result
-
+    
+    # 获取屏幕截图
+    def get_screenshot(self, fileName):
+        # 检查是否链接设备
+        if self.device is None:
+            return False
+        # 截图并保存
+        os.system('adb shell screencap -p /sdcard/{}.jpg'.format(fileName))
+        os.system('adb pull /sdcard/{}.jpg ./images/'.format(fileName))
+        # 图片路径
+        return os.path.join(os.getcwd(),"images", "{}.jpg".format(fileName))
 
     # 号召检测
     def assemble_detection(self):
         # 检查是否链接设备
         if self.device is None:
             return False
+
+
+# 运行监测防护罩
+async def run_detect_mask():
+    while True:
+        robot = WangchaoRobot()
+        device_name, device_id = get_current_device()
+        config, device_name = get_current_device_config()
+        robot.connectDevice(device_id)
+        robot.setConfig(config)
+        robot.detect_mask()
+        await asyncio.sleep(config["protected_mask_query_time"])
 
 
 if __name__ == '__main__':

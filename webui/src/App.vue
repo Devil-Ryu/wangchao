@@ -1,9 +1,10 @@
 <script setup>
-import Home from './views/Home.vue'
 </script>
 
 <template>
-  <Home />
+  <div class="h-full flex flex-column bg-gray-300">
+    <router-view />
+  </div>
 </template>
 
 <style scoped>
