@@ -22,16 +22,14 @@
                 <Button class="w-full justify-content-center" @click="openDeviceManageDialog">
                     <div><i class="pi pi-arrow-right-arrow-left mr-2"></i>设备管理</div>
                 </Button>
-
             </div>
-
         </div>
         <div class="h-full m-2">
             <div class="flex bg-primary w-full border-round  align-items-center h-4rem">
                 <div id="icon" class="flex  h-full  w-4rem align-items-center justify-content-center"><i
                         class="pi pi-shield" style="font-size: 1.5rem;"></i></div>
                 <div class="w-full h-full flex justify-content-between align-items-center">
-                    <div class="ml-2">防护罩监听</div>
+                    <div class="ml-2">防护罩状态监听</div>
                     <div class="flex">
                         <Button @click="router.push({path: '/protect'})" >配置</Button>
                         <Button v-if="!deviceInfo.protected_mask_enabled" @click="startProtect">运行</Button>
@@ -44,10 +42,10 @@
                 <div id="icon" class="flex  h-full  w-4rem align-items-center justify-content-center"><i
                         class="pi pi-megaphone" style="font-size: 1.5rem;"></i></div>
                 <div class="w-full h-full  flex justify-content-between align-items-center">
-                    <div class="ml-2">集结监听</div>
+                    <div class="ml-2">集结自动开罩监听</div>
                     <div class="flex">
+                        <Button @click="router.push({path: '/gather'})" >配置</Button>
                         <Button>运行</Button>
-                        <Button>停止</Button>
                     </div>
                 </div>
 
