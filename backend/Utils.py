@@ -3,6 +3,11 @@ import cv2
 import numpy as np
 import os
 import uiautomator2 as u2
+import time
+import re
+from datetime import datetime, timedelta
+from ocr import find_text_by_ocr
+import requests
 
 # 读取json文件并和字典进行合并
 def merge_json_to_dict(json_file, dict_obj):
@@ -47,10 +52,9 @@ def compare_region(image1, image2, threshold_min=0.08, threshold_max=0.30):
     # 根据颜色范围创建掩膜
     mask1 = cv2.inRange(hsv1, lower_blue, upper_blue)
     mask2 = cv2.inRange(hsv2, lower_blue, upper_blue)
-    cv2.imwrite("./images/mask1.jpg", mask1)
-    cv2.imwrite("./images/mask2.jpg", mask2)
+    cv2.imwrite("./images/detect_mask1_hsv.jpg", mask1)
+    cv2.imwrite("./images/detect_mask2_hsv.jpg", mask2)
 
-    # cv2.imwrite("test1ccc.jpg", mask)
     diff = cv2.absdiff(mask1, mask2)
     ration = round( np.count_nonzero(diff)/ diff.size, 2)
     print(ration)
@@ -88,10 +92,18 @@ def add_device_to_list(device_name, device_id):
     write_device_list(device_list)  # 写入设备列表到文件
     write_device_config(device_name, {
         "device_id": "",
-        "protected_mask_region": [],
-        "protected_mask_query_time": 60,
-        "assemble_detection_region": [],
-        "protected_mask_enabled": False,
+        "protected_mask_region": [],  # 防护罩区域
+        "protected_mask_query_time": 60,  # 防护罩查询间隔
+        "gather_detection_region": [],  # 集结图标区域
+        "gather_notification_deadline": 180,  # 集结通知截止时间
+        "gather_notification_interval": 15,  # 集结通知间隔
+        "gather_notification_enabled": False,  # 集结通知是否开启
+        "gather_notification_token": "",  # 集结通知token
+        "gather_notification_receiver": "",  # 集结通知接收者
+        "gather_notification_isGroup": False,  # 集结通知是否为群聊
+        "gather_detection_interval": 60,  # 集结检测间隔
+        "gather_detection_enabled": False,  # 集结检测是否开启
+        "protected_mask_enabled": False,  # 防护罩检测是否开启
     })
     return True
 
@@ -182,4 +194,103 @@ def get_current_device_status():
         except:
             return False
 
+# 采用opencv的模板匹配算法，在gather_detection_region区域中查找gather_image的位置，返回坐标(x,y)(限定区域)
+def detect_gather_image(detect_image, sample_image, ration=0.4, threshold=0.9, visualize=False):
 
+     # 将图片和模板都等比缩小
+    detect_image = cv2.resize(detect_image, (0,0), fx=ration, fy=ration)
+    sample_image = cv2.resize(sample_image, (0,0), fx=ration, fy=ration)
+
+    found = None
+    for scale in np.linspace(0.5, 1.5, 15)[::-1]:
+        resized = cv2.resize(sample_image, (0,0), fx=scale, fy=scale)
+
+        alpha_channel = resized[:,:,3]
+        _, mask = cv2.threshold(alpha_channel, 0, 255, cv2.THRESH_BINARY)
+
+        resized = resized[:,:,:3]
+
+        result = cv2.matchTemplate(detect_image, resized, cv2.TM_CCORR_NORMED, mask=mask)
+        # 将result中inf的元素替换为0
+        result[np.where(np.isinf(result))] = 0
+        (_, max_val, _, max_loc) = cv2.minMaxLoc(result)
+
+        if found is None or max_val > found[0]:
+            found = (max_val, max_loc, scale)
+
+    print("found: ", found)
+    (max_val, max_loc, scale) = found
+    top_left = (int(max_loc[0] ), int(max_loc[1] ))
+    bottom_right = (int((max_loc[0] + sample_image.shape[1]*scale)), int((max_loc[1] + sample_image.shape[0] * scale)))
+
+    # 打印素材中心点位置的百分比坐标
+    center_x = (top_left[0] + bottom_right[0]) / 2
+    center_y = (top_left[1] + bottom_right[1]) / 2
+    center_x_percent = center_x / detect_image.shape[1]
+    center_y_percent = center_y / detect_image.shape[0]
+    print(f"center_x_percent: {center_x_percent}, center_y_percent: {center_y_percent}")
+
+    if max_val > threshold:
+        if visualize:
+            # 在图像上标记出找到的位置
+            cv2.rectangle(detect_image, top_left, bottom_right, (0, 255, 0), 1)
+            cv2.putText(detect_image, "{:.2f}".format(max_val), (top_left[0], top_left[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+
+            # 显示结果
+            # 设置窗口大小
+            cv2.imshow('Result', detect_image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+        return center_x_percent, center_y_percent
+    else:
+        print("not found")
+        return None
+
+# 从截图中获取集结剩余时间
+def get_gather_time_left(filePath):
+    result = find_text_by_ocr(filePath, "集结时间")
+    if result is not None:
+        match = re.search(r'\d+:\d+', result)
+        if match is None:
+            return None
+        gather_time_left = match.group()
+        # 从字符串中读取时间，并转化为秒
+        time_obj = datetime.strptime(gather_time_left, '%M:%S')
+        # 使用timedelta计算时间对象的总秒数
+        total_seconds = timedelta(hours=time_obj.hour, minutes=time_obj.minute, seconds=time_obj.second).total_seconds()
+        return total_seconds
+    else:
+        return None
+
+# 微信通知
+def wechat_notify(token, receiver, message, isRoom=False):
+    url = "http://192.168.2.29:3001/webhook/msg/v2?token={}".format(token)
+    headers = {
+        "Content-Type": "application/json"
+    }
+    data = {
+        "to": receiver,
+        "isRoom": isRoom,
+        "data": {"content": message}
+    }
+    try:
+        response = requests.post(url, headers=headers, data=json.dumps(data))
+        resData = response.json()
+        print((response.status_code, resData))
+        return response.status_code, resData
+    except Exception as e:
+        print((response.status_code, e.args))
+        return 500, e.args
+    
+
+
+def test():
+#    check_gather_notification()
+   pass
+
+
+
+
+if __name__ == '__main__':
+    status_code, resData = wechat_notify("", "Hypocrite", "测试消息\n第二行")    
+    print(status_code, resData)

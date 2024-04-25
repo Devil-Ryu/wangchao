@@ -76,7 +76,7 @@
 
         <div class="w-full mt-4">
             <Button class="w-full justify-content-center" size="small" @click="saveConfig">
-                <div>STEP3&nbsp;&nbsp;保存配置</div>
+                <div>STEP2&nbsp;&nbsp;保存配置</div>
             </Button>
         </div>
         <Button class="w-full justify-content-center mt-4" size="small"

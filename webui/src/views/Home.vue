@@ -32,8 +32,8 @@
                     <div class="ml-2">防护罩状态监听</div>
                     <div class="flex">
                         <Button @click="router.push({path: '/protect'})" >配置</Button>
-                        <Button v-if="!deviceInfo.protected_mask_enabled" @click="startProtect">运行</Button>
-                        <Button v-if="deviceInfo.protected_mask_enabled" @click="stopProtect">停止</Button>
+                        <Button v-if="!deviceInfo.protected_mask_enabled" @click="startTask('protect_task', 'protected_mask_enabled')">运行</Button>
+                        <Button v-if="deviceInfo.protected_mask_enabled" @click="stopTask('protect_task', 'protected_mask_enabled')">停止</Button>
                     </div>
                 </div>
 
@@ -45,7 +45,8 @@
                     <div class="ml-2">集结自动开罩监听</div>
                     <div class="flex">
                         <Button @click="router.push({path: '/gather'})" >配置</Button>
-                        <Button>运行</Button>
+                        <Button v-if="!deviceInfo.gather_detection_enabled" @click="startTask('gather_task', 'gather_detection_enabled')">运行</Button>
+                        <Button v-if="deviceInfo.gather_detection_enabled" @click="stopTask('gather_task', 'gather_detection_enabled')">停止</Button>
                     </div>
                 </div>
 
@@ -106,6 +107,7 @@ const deviceInfo = ref({
     deviceID: '',
     deviceStatus: false,
     protected_mask_enabled: false,
+    gather_detection_enabled: false,
 });
 const selectedDevice = ref({});
 const deviceList = ref([]);
@@ -212,7 +214,8 @@ function refreshDeviceInfo() {
                 deviceInfo.value.deviceName = data.data.device_name;
                 deviceInfo.value.deviceID = data.data.device_id;
                 deviceInfo.value.deviceStatus = data.data.device_status;
-                deviceInfo.value.protected_mask_enabled = data.data.protected_mask_enabled;
+                deviceInfo.value.protected_mask_enabled = JSON.parse(data.data.protected_mask_enabled);
+                deviceInfo.value.gather_detection_enabled = JSON.parse(data.data.gather_detection_enabled);
             } else {
                 toast.add({ severity: 'error', summary: '设备信息获取失败', detail: data.message, life: 3000 });
             }
@@ -237,39 +240,42 @@ function updateConfig(key, value) {
         });
 }
 
-function startProtect() {
-    deviceInfo.value.protected_mask_enabled = true;
-    updateConfig('protected_mask_enabled', true);
-    fetch('http://127.0.0.1:8000/functions/start_protect', {
+function startTask(task_id, config_name) {
+    deviceInfo.value[config_name]= true;
+    updateConfig(config_name, true);
+    fetch('http://127.0.0.1:8000/functions/start_task?task_id=' + task_id, {
         method: 'GET'})
         .then(response => response.json())
         .then(data => {
             if (data.status_code !== undefined && data.status_code === 200) {
-                toast.add({ severity: 'success', summary: '防护罩监听启动成功', detail: data.message, life: 3000 });
+
+
+                toast.add({ severity: 'success', summary: '任务启动成功', detail: data.message, life: 3000 });
             } else {
-                toast.add({ severity: 'error', summary: '防护罩监听启动失败', detail: data.message, life: 3000 });
+                toast.add({ severity: 'error', summary: '任务启动失败', detail: data.message, life: 3000 });
             }
         })
         .catch((error) => {
-            toast.add({ severity: 'error', summary: '防护罩监听启动失败', detail: error, life: 3000 }); 
+            toast.add({ severity: 'error', summary: '任务启动失败', detail: error, life: 3000 }); 
         });
 }
 
-function stopProtect() {
-    deviceInfo.value.protected_mask_enabled = false;
-    updateConfig('protected_mask_enabled', false);
-    fetch('http://127.0.0.1:8000/functions/stop_protect?task_id=protect_task', {
+function stopTask(task_id, config_name) {
+
+    deviceInfo.value[config_name]= false;
+    updateConfig(config_name, false);
+    fetch('http://127.0.0.1:8000/functions/stop_task?task_id=' + task_id, {
         method: 'GET'})
         .then(response => response.json())
         .then(data => {
             if (data.status_code !== undefined && data.status_code === 200) {
-                toast.add({ severity: 'success', summary: '防护罩监听停止成功', detail: data.message, life: 3000 });
+                toast.add({ severity: 'success', summary: '任务停止成功', detail: data.message, life: 3000 });
             } else {
-                toast.add({ severity: 'error', summary: '防护罩监听停止失败', detail: data.message, life: 3000 });
+                toast.add({ severity: 'error', summary: '任务停止失败', detail: data.message, life: 3000 });
             }
         })
         .catch((error) => {
-            toast.add({ severity: 'error', summary: '防护罩监听停止失败', detail: error, life: 3000 }); 
+            toast.add({ severity: 'error', summary: '任务停止失败', detail: error, life: 3000 }); 
         });
 }
 

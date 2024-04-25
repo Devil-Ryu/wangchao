@@ -4,14 +4,16 @@ from fastapi import FastAPI, File, Response, Form
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Union
-from Robot import WangchaoRobot, run_detect_mask
+from Robot import WangchaoRobot, run_detect_mask, run_gather_detection
 from Utils import add_device_to_list, get_device_list, switch_current_device, delete_device_from_list, get_current_device, get_current_device_status, get_current_device_config, update_protected_mask_region, update_global_config_by_name
-
+import threading
+import queue
 
 class TaskManager:
     def __init__(self):
         self.tasks = {}
-    
+        self.queue = asyncio.Queue()
+  
     def add_task(self, task_id, task):
         self.tasks[task_id] = task
     
@@ -22,6 +24,11 @@ class TaskManager:
         self.tasks.pop(task_id, None)
 
 task_manager = TaskManager()
+task_manager.queue.put_nowait(1)
+
+thread_queue = queue.Queue()
+thread_queue.put_nowait(1)
+
 app = FastAPI()
 
 origins = [
@@ -47,6 +54,15 @@ class ProtectParams(BaseModel):
     index: int
     protected_mask_region: list
     protected_mask_query_time: int
+
+class GatherParams(BaseModel):
+    gather_notification_deadline: int
+    gather_notification_interval: int
+    gather_detection_interval: int
+    gather_notification_enabled: bool
+    gather_notification_token: str
+    gather_notification_receiver: str
+    gather_notification_isGroup: bool
 
 
 @app.get("/items/{item_id}")
@@ -74,11 +90,13 @@ async def current_device():
         device["device_id"] = current_device[1]
         device["device_status"] = status
         device["protected_mask_enabled"] = config.get("protected_mask_enabled", False)
+        device["gather_detection_enabled"] = config.get("gather_detection_enabled", False)
     else:
         device["device_name"] = ""
         device["device_id"] = ""
         device["device_status"] = status
         device["protected_mask_enabled"] = False
+        device["gather_detection_enabled"] = False
     return {"status_code": 200, "message": "", "data": device}
 
 
@@ -96,6 +114,18 @@ async def update_protect_config(item: ProtectParams):
     update_global_config_by_name("protected_mask_query_time", item.protected_mask_query_time)
     return {"status_code": 200, "message": "", "data": []}
 
+# 保存集结区域配置
+@app.post("/update/gather_config")
+async def update_gather_config(item: GatherParams):
+    # 获取设备配置
+    update_global_config_by_name("gather_notification_deadline", item.gather_notification_deadline)
+    update_global_config_by_name("gather_notification_interval", item.gather_notification_interval)
+    update_global_config_by_name("gather_detection_interval", item.gather_detection_interval)
+    update_global_config_by_name("gather_notification_enabled", item.gather_notification_enabled)
+    update_global_config_by_name("gather_notification_token", item.gather_notification_token)
+    update_global_config_by_name("gather_notification_receiver", item.gather_notification_receiver)
+    update_global_config_by_name("gather_notification_isGroup", item.gather_notification_isGroup)
+    return {"status_code": 200, "message": "", "data": []}
 
 # 更新配置
 @app.get("/update/config")
@@ -165,17 +195,25 @@ async def navigate_to_target(target_x: int, target_y: int):
     return {"status_code": 200, "message": "", "data": imagePath}
 
 task = None
-# 启动保护罩监听
-@app.get("/functions/start_protect")
-async def start_protect():
-    task = asyncio.create_task(run_detect_mask())
-    task_manager.add_task("protect_task", task)
-    return {"status_code": 200, "message": "任务:[" +task.get_name() + "]启动成功", "data": []}
+# 启动保护罩监听(修改成启动任务)
+@app.get("/functions/start_task")
+async def start_task(task_id: str):
+    task = None
+    if task_id == "protect_task":
+        task = asyncio.create_task(run_detect_mask(task_manager.queue))
+    if task_id == "gather_task":
+        task = asyncio.create_task(run_gather_detection(task_manager.queue))
+    if task is None:
+        return {"status_code": 400, "message": "任务:[" +task_id + "]不存在", "data": []}
+    else:
+        task_manager.add_task(task_id, task)
+        return {"status_code": 200, "message": "任务:[" +task_id + "]启动成功", "data": []}
 
 # 停止保护罩监听
-@app.get("/functions/stop_protect")
-async def stop_protect(task_id: str):
+@app.get("/functions/stop_task")
+async def stop_task(task_id: str):
     task = task_manager.get_task(task_id)
+    task_manager.remove_task(task_id)
     try:
         task.cancel()
         await task
